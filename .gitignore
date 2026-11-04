@@ -45,4 +45,5 @@ dist/
 
 # Local mission data (may contain real search-area coordinates)
 /data/search_area.json
+/data/search_areas.json
 /data/logs/

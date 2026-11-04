@@ -64,26 +64,27 @@ uav_code/
 │   ├── map.html
 │   └── map.js
 └── data/
-    └── search_area.json
+    └── search_areas.json
 
 Các thành phần đã có:
 
-- `main.py`: điểm bắt đầu chạy ứng dụng; hiện tạo `QApplication`, mở `GPSMap` và chạy vòng lặp Qt. File không còn gọi `load_search_area_points()` nên lỗi gọi hàm chưa định nghĩa ở lần rà soát trước không còn trong mã hiện tại. Chức năng đọc/in tọa độ từ `data/search_area.json` hiện không có trong `main.py`.
+- `main.py`: điểm bắt đầu chạy ứng dụng; hiện tạo `QApplication`, mở `GPSMap` và chạy vòng lặp Qt. Chức năng đọc/in tọa độ đã lưu hiện chưa được tích hợp trong `main.py`.
 - `GUI/main_window.py`: tạo cửa sổ PyQt5, nhúng trang bản đồ và thiết lập QWebChannel.
-- `GUI/map_bridge.py`: nhận dữ liệu polygon, kiểm tra tọa độ và lưu JSON.
+- `GUI/map_bridge.py`: nạp/lưu danh sách polygon qua QWebChannel, kiểm tra dữ liệu và đọc định dạng cũ để chuyển tiếp.
 - `GUI/__init__.py`: đánh dấu `GUI` là package Python.
 - `mission/coverage_path.py`: chuyển polygon GPS sang XY cục bộ và tạo các đoạn quét song song.
 - `mission/__init__.py`: đánh dấu `mission` là package Python.
 - `assets/map.html` và `assets/map.js`: trang Leaflet và xử lý tương tác vẽ khu vực.
-- `data/search_area.json`: dữ liệu polygon đã lưu; tại lần rà soát này file có bốn điểm GPS.
+- `data/search_areas.json`: dữ liệu hiện tại chứa danh sách nhiều polygon. `.gitignore` bỏ qua file dữ liệu cục bộ này.
+- File `data/search_area.json` theo định dạng cũ đã được xóa sau khi người dùng yêu cầu. Mã bridge vẫn giữ khả năng đọc file cũ nếu file đó có ở một bản cài đặt khác.
 - Python đã tạo các thư mục `__pycache__` trong `GUI/` và `mission/`. Đây là bytecode tự sinh khi Python nạp module; chúng không phải mã nguồn. Sự tồn tại của chúng xác nhận các module đã được nạp ít nhất một lần, nhưng không xác nhận thao tác vẽ polygon hoặc tạo đường quét chạy đúng.
 - PyQt5, PyQtWebEngine, Leaflet và MapTiler được dùng trong ứng dụng. Bản đồ cần kết nối internet để tải tài nguyên bên ngoài.
 
 Tiến độ chức năng:
 
 - Giai đoạn 1 — Hiển thị bản đồ trong PyQt5: code khởi tạo cửa sổ và nạp trang bản đồ đang có; chưa chạy lại để xác nhận hoạt động trong trạng thái hiện tại.
-- Giai đoạn 2 — Vẽ polygon và truyền GPS về Python: đã có code click thêm marker, vẽ đường/polygon, xóa điểm cuối, xóa toàn bộ, xác nhận khu vực, truyền dữ liệu qua QWebChannel, kiểm tra tọa độ GPS và lưu JSON. `data/search_area.json` hiện có bốn điểm. Chưa kiểm chứng toàn bộ luồng trong lần rà soát này. Giao diện hiển thị số điểm và thông báo lưu, nhưng chưa có danh sách tọa độ đầy đủ. `main.py` hiện chưa có hàm đọc hoặc in các tọa độ đã lưu.
-- Giai đoạn 3 — Chuyển GPS sang XY và sinh đường Zigzag: đã viết phiên bản đầu trong `mission/coverage_path.py` và thêm điều khiển tạo đường quét trên bản đồ. Chưa chạy kiểm tra. Thuật toán hiện dùng phép chiếu equirectangular cục bộ, quét ngang theo một hướng cố định và trả về các đoạn quét riêng; chưa xoay/tối ưu hướng, chưa nối các đoạn bằng đường di chuyển, chưa lưu đường bay và chưa gửi waypoint cho UAV.
+- Giai đoạn 2 — Vẽ polygon và truyền GPS về Python: code hiện hỗ trợ tạo nhiều polygon, chọn polygon, đổi tên, xóa từng polygon, xem tọa độ, gửi toàn bộ danh sách qua QWebChannel và lưu vào `data/search_areas.json`. Bridge vẫn có thể nạp `data/search_area.json` cũ nếu file đó tồn tại ở bản cài đặt khác. Chưa chạy xác nhận giao diện và luồng lưu/nạp nhiều polygon.
+- Giai đoạn 3 — Chuyển GPS sang XY và sinh đường Zigzag: đã viết phiên bản đầu trong `mission/coverage_path.py` và thêm điều khiển tạo đường quét trên polygon đang chọn. Chưa chạy kiểm tra. Thuật toán hiện dùng phép chiếu equirectangular cục bộ, quét ngang theo một hướng cố định và trả về các đoạn quét riêng; chưa xoay/tối ưu hướng, chưa nối các đoạn bằng đường di chuyển, chưa lưu đường bay và chưa gửi waypoint cho UAV.
 - Giai đoạn 4 — Phân chia khu vực và phân công nhiệm vụ: chưa triển khai.
 - Giai đoạn 5 — Điều khiển một UAV bằng MAVSDK: đã học và thử nghiệm một số nội dung, cần kiểm tra lại code thực tế trước khi đánh giá mức độ hoàn thành.
 - Giai đoạn 6 — Kết nối đường bay sinh tự động với PX4 SITL: chưa hoàn thành.
@@ -94,7 +95,7 @@ Lưu ý: Tiến độ trong tài liệu là bản ghi tại lần rà soát gầ
 
 ## 4. TIẾN ĐỘ GIAI ĐOẠN 2 VÀ NHIỆM VỤ HIỆN TẠI
 
-Giai đoạn 2 đã có phần triển khai trong code nhưng cần chạy và xác nhận lại cùng ứng dụng. Giai đoạn đang được triển khai tiếp theo là giai đoạn 3, theo yêu cầu của người phát triển.
+Giai đoạn 2 đã có phần triển khai trong code nhưng cần chạy và xác nhận lại cùng ứng dụng. Hiện giao diện hỗ trợ nhiều polygon; dữ liệu cũ được đọc như polygon đầu tiên và file định dạng mới chỉ được tạo khi người dùng lưu thay đổi. Giai đoạn đang được triển khai là giai đoạn 3, với phần mở rộng quản lý nhiều polygon.
 
 ### Tiêu chí giai đoạn 2
 
@@ -110,6 +111,15 @@ Mục tiêu cụ thể:
 8. Python nhận, kiểm tra và lưu danh sách tọa độ.
 9. Hiển thị danh sách tọa độ trên giao diện hoặc vùng thông tin của ứng dụng.
 10. Có thể xuất polygon thành JSON để dùng trong các giai đoạn tiếp theo.
+
+Phần quản lý nhiều polygon hiện được tổ chức như sau:
+
+- Mỗi polygon có `id`, `name` và danh sách `coordinates`.
+- Python lưu một tài liệu JSON có `schema_version` và danh sách `areas` trong `data/search_areas.json`.
+- JavaScript cho phép vẽ polygon mới, hoàn thành/lưu, chọn từ danh sách hoặc click trên bản đồ, đổi tên, xóa và xem tọa độ.
+- Khi mở ứng dụng, bridge ưu tiên file mới; nếu chưa có thì thử đọc `data/search_area.json` cũ thành một polygon trong bộ nhớ. Bản làm việc hiện tại không còn file cũ này.
+- Đường quét được tạo cho polygon đang chọn.
+- Cần chạy xác nhận nạp legacy, tạo nhiều polygon, lưu, khởi động lại, chọn, đổi tên, xóa và tạo đường quét cho polygon được chọn.
 
 Dữ liệu đầu ra dự kiến:
 

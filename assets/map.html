@@ -55,7 +55,7 @@
             cursor: pointer;
         }
 
-        #point-count {
+        #area-count {
             margin-left: auto;
             font-family: sans-serif;
         }
@@ -65,6 +65,15 @@
             color: #333;
         }
 
+        #coordinate-list {
+            box-sizing: border-box;
+            width: 100%;
+            max-height: 100px;
+            margin: 0;
+            overflow: auto;
+            font-size: 11px;
+        }
+
     </style>
 
 </head>
@@ -72,14 +81,22 @@
 <body>
 
     <div id="toolbar">
+        <button id="new-area" type="button">Vẽ đa giác mới</button>
         <button id="undo-point" type="button">Xóa điểm cuối</button>
-        <button id="clear-area" type="button">Xóa toàn bộ</button>
-        <button id="confirm-area" type="button">Xác nhận và lưu</button>
+        <button id="finish-area" type="button">Hoàn thành và lưu</button>
+        <button id="cancel-drawing" type="button">Hủy vẽ</button>
+        <select id="area-list" aria-label="Chọn khu vực tìm kiếm">
+            <option value="">Chưa có khu vực</option>
+        </select>
+        <input id="area-name" type="text" placeholder="Tên khu vực">
+        <button id="rename-area" type="button">Đổi tên</button>
+        <button id="delete-area" type="button">Xóa khu vực đã chọn</button>
         <label for="spacing">Khoảng cách quét (m):</label>
         <input id="spacing" type="number" min="1" step="1" value="20">
         <button id="generate-path" type="button">Tạo đường quét</button>
-        <span id="point-count">0 điểm</span>
+        <span id="area-count">0 khu vực</span>
         <span id="message" role="status"></span>
+        <pre id="coordinate-list">Chọn một khu vực để xem tọa độ.</pre>
     </div>
     <div id="map"></div>
 
