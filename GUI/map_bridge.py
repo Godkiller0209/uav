@@ -8,6 +8,7 @@ import uuid
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from mission.coverage_path import create_coverage_path
+from mission.waypoint_store import delete_waypoints_for_area, save_waypoints
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -64,6 +65,25 @@ class MapBridge(QObject):
             "data/search_areas.json"
         )
 
+    @pyqtSlot(str)
+    def delete_waypoints_for_area(self, area_id):
+        try:
+            deleted_count = delete_waypoints_for_area(area_id)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
+            self.status_changed.emit(
+                f"Không thể xóa waypoint của khu vực: {error}"
+            )
+            return
+
+        if deleted_count:
+            self.status_changed.emit(
+                f"Đã xóa {deleted_count} tuyến waypoint của khu vực."
+            )
+        else:
+            self.status_changed.emit(
+                "Khu vực đã xóa không có tuyến waypoint đã lưu."
+            )
+
     def _read_search_areas(self):
         if SEARCH_AREAS_FILE.exists():
             return json.loads(SEARCH_AREAS_FILE.read_text(encoding="utf-8"))
@@ -113,11 +133,18 @@ class MapBridge(QObject):
             area_ids.add(area["id"])
             cls._validate_coordinates(area["coordinates"])
 
-    @pyqtSlot(str, float)
-    def generate_coverage_path(self, coordinates_json, spacing_m):
+    @pyqtSlot(str, str, str, float, str)
+    def generate_coverage_path(
+            self, area_id, area_name, coordinates_json, spacing_m, uav_json):
         try:
             coordinates = json.loads(coordinates_json)
-            coverage_path = create_coverage_path(coordinates, spacing_m)
+            uav_position = json.loads(uav_json)
+            coverage_path = create_coverage_path(
+                coordinates,
+                spacing_m,
+                uav_position,
+                algorithm="zigzag",
+            )
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             self.status_changed.emit(f"Không thể tạo đường quét: {error}")
             return
@@ -125,9 +152,27 @@ class MapBridge(QObject):
         self.coverage_path_ready.emit(
             json.dumps(coverage_path, ensure_ascii=False)
         )
+
+        try:
+            save_waypoints(
+                area_id,
+                area_name,
+                "zigzag",
+                coverage_path["spacing_m"],
+                uav_position,
+                coverage_path["waypoints"],
+            )
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
+            self.status_changed.emit(
+                f"Đã tạo đường quét nhưng không lưu được waypoint: {error}"
+            )
+            return
+
         self.status_changed.emit(
             f"Đã tạo {coverage_path['lane_count']} làn quét, "
-            f"khoảng cách {coverage_path['spacing_m']} m."
+            f"{len(coverage_path['waypoints'])} waypoint, "
+            f"khoảng cách {coverage_path['spacing_m']} m. "
+            "Đã lưu vào data/waypoints.json."
         )
 
     @staticmethod

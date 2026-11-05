@@ -74,6 +74,34 @@
             font-size: 11px;
         }
 
+        .mode-active {
+            background: #8bc34a;
+            border-color: #558b2f;
+            color: #102000;
+        }
+
+        .waypoint-icon {
+            background: transparent;
+            border: 0;
+        }
+
+        .waypoint-icon span {
+            display: block;
+            width: 24px;
+            height: 24px;
+            border: 2px solid white;
+            border-radius: 50%;
+            background: #6a1b9a;
+            color: white;
+            font: bold 12px/24px sans-serif;
+            text-align: center;
+            box-shadow: 0 1px 4px #333;
+        }
+
+        .waypoint-first span {
+            background: #ef6c00;
+        }
+
     </style>
 
 </head>
@@ -91,6 +119,7 @@
         <input id="area-name" type="text" placeholder="Tên khu vực">
         <button id="rename-area" type="button">Đổi tên</button>
         <button id="delete-area" type="button">Xóa khu vực đã chọn</button>
+        <button id="choose-uav-position" type="button">Chọn vị trí UAV</button>
         <label for="spacing">Khoảng cách quét (m):</label>
         <input id="spacing" type="number" min="1" step="1" value="20">
         <button id="generate-path" type="button">Tạo đường quét</button>

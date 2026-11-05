@@ -70,11 +70,11 @@ Các thành phần đã có:
 
 - `main.py`: điểm bắt đầu chạy ứng dụng; hiện tạo `QApplication`, mở `GPSMap` và chạy vòng lặp Qt. Chức năng đọc/in tọa độ đã lưu hiện chưa được tích hợp trong `main.py`.
 - `GUI/main_window.py`: tạo cửa sổ PyQt5, nhúng trang bản đồ và thiết lập QWebChannel.
-- `GUI/map_bridge.py`: nạp/lưu danh sách polygon qua QWebChannel, kiểm tra dữ liệu và đọc định dạng cũ để chuyển tiếp.
+- `GUI/map_bridge.py`: nạp/lưu danh sách polygon qua QWebChannel, kiểm tra dữ liệu, đọc định dạng cũ nếu có, và gọi thuật toán tạo waypoint.
 - `GUI/__init__.py`: đánh dấu `GUI` là package Python.
 - `mission/coverage_path.py`: chuyển polygon GPS sang XY cục bộ và tạo các đoạn quét song song.
 - `mission/__init__.py`: đánh dấu `mission` là package Python.
-- `assets/map.html` và `assets/map.js`: trang Leaflet và xử lý tương tác vẽ khu vực.
+- `assets/map.html` và `assets/map.js`: trang Leaflet, quản lý nhiều polygon, chọn vị trí UAV giả lập và hiển thị tuyến cùng waypoint.
 - `data/search_areas.json`: dữ liệu hiện tại chứa danh sách nhiều polygon. `.gitignore` bỏ qua file dữ liệu cục bộ này.
 - File `data/search_area.json` theo định dạng cũ đã được xóa sau khi người dùng yêu cầu. Mã bridge vẫn giữ khả năng đọc file cũ nếu file đó có ở một bản cài đặt khác.
 - Python đã tạo các thư mục `__pycache__` trong `GUI/` và `mission/`. Đây là bytecode tự sinh khi Python nạp module; chúng không phải mã nguồn. Sự tồn tại của chúng xác nhận các module đã được nạp ít nhất một lần, nhưng không xác nhận thao tác vẽ polygon hoặc tạo đường quét chạy đúng.
@@ -84,7 +84,7 @@ Tiến độ chức năng:
 
 - Giai đoạn 1 — Hiển thị bản đồ trong PyQt5: code khởi tạo cửa sổ và nạp trang bản đồ đang có; chưa chạy lại để xác nhận hoạt động trong trạng thái hiện tại.
 - Giai đoạn 2 — Vẽ polygon và truyền GPS về Python: code hiện hỗ trợ tạo nhiều polygon, chọn polygon, đổi tên, xóa từng polygon, xem tọa độ, gửi toàn bộ danh sách qua QWebChannel và lưu vào `data/search_areas.json`. Bridge vẫn có thể nạp `data/search_area.json` cũ nếu file đó tồn tại ở bản cài đặt khác. Chưa chạy xác nhận giao diện và luồng lưu/nạp nhiều polygon.
-- Giai đoạn 3 — Chuyển GPS sang XY và sinh đường Zigzag: đã viết phiên bản đầu trong `mission/coverage_path.py` và thêm điều khiển tạo đường quét trên polygon đang chọn. Chưa chạy kiểm tra. Thuật toán hiện dùng phép chiếu equirectangular cục bộ, quét ngang theo một hướng cố định và trả về các đoạn quét riêng; chưa xoay/tối ưu hướng, chưa nối các đoạn bằng đường di chuyển, chưa lưu đường bay và chưa gửi waypoint cho UAV.
+- Giai đoạn 3 — Chuyển GPS sang XY và sinh waypoint Zigzag: code hiện cho phép chọn vị trí UAV giả lập trên bản đồ, tạo các làn quét cho polygon đang chọn, chỉ xét hai đoạn quét biên (đầu tiên và cuối cùng) để chọn đầu mút gần vị trí UAV làm waypoint đầu tiên, sắp thứ tự các đoạn còn lại theo đầu gần nhất, tạo tuyến liên tục và đánh số waypoint. Các làn quét riêng được dùng nội bộ để tính tuyến và không hiển thị. Bản đồ vẽ tuyến bay bằng nét đứt màu đỏ và waypoint có số thứ tự. Chưa chạy kiểm tra giao diện hoặc thuật toán. Tuyến có thể đi ra ngoài polygon ở đoạn chuyển tiếp; hướng quét vẫn cố định, đường bay chưa lưu và chưa gửi tới UAV.
 - Giai đoạn 4 — Phân chia khu vực và phân công nhiệm vụ: chưa triển khai.
 - Giai đoạn 5 — Điều khiển một UAV bằng MAVSDK: đã học và thử nghiệm một số nội dung, cần kiểm tra lại code thực tế trước khi đánh giá mức độ hoàn thành.
 - Giai đoạn 6 — Kết nối đường bay sinh tự động với PX4 SITL: chưa hoàn thành.
@@ -144,10 +144,12 @@ Mục tiêu là chuyển polygon GPS sang hệ tọa độ phẳng cục bộ, t
 
 - `mission/coverage_path.py` dùng phép chiếu equirectangular cục bộ quanh tâm gần đúng của polygon, tính bằng mét.
 - Các đường quét hiện chạy theo một hướng cố định. Khoảng cách người dùng nhập được dùng làm khoảng cách tối đa giữa các làn; thuật toán chia đều khu vực theo chiều cao.
-- Mỗi đoạn giao của một làn quét với polygon được trả về riêng. Điều này giữ các đoạn nằm trong polygon, kể cả polygon lõm, nhưng chưa tạo đường nối giữa các đoạn.
+- Mỗi đoạn giao của một làn quét với polygon được dùng nội bộ để lập tuyến; không hiển thị riêng các đoạn quét. Tuyến waypoint liên tục được vẽ bằng nét đứt màu đỏ.
+- Người dùng có thể bật/tắt chế độ chọn vị trí UAV; click bản đồ đặt hoặc dời marker xanh lá. Vị trí này chỉ tồn tại trong phiên hiện tại.
+- Waypoint đầu tiên là đầu mút gần UAV nhất trong hai đoạn quét biên (đầu tiên hoặc cuối cùng). Các điểm đầu/cuối của từng đoạn quét được đánh số theo thứ tự bay.
 - Các làn hiện song song trục X vì thuật toán thay đổi tọa độ Y để tạo làn và lấy các đoạn theo trục X. Có thể mở rộng bằng cách xoay polygon sang hệ XY tạm theo góc quét, tạo làn trong hệ đó rồi xoay waypoint trở lại. Bước tiếp theo nên cho người dùng chọn góc trước; tự động thử và tối ưu góc sẽ làm sau khi cách xoay được kiểm chứng.
 - Cần chạy ứng dụng và kiểm tra polygon lồi/lõm, các khoảng cách quét khác nhau, polygon không hợp lệ và vị trí đường quét trên bản đồ trước khi xác nhận giai đoạn 3.
-- Chưa tối ưu hướng quét, tạo tuyến nối an toàn, lưu đường bay, hoặc kết nối PX4/Gazebo.
+- Chưa tối ưu hướng quét, kiểm tra các đoạn chuyển tiếp có nằm trong vùng an toàn hay không, lưu đường bay, hoặc kết nối PX4/Gazebo.
 
 ## 5. NGUYÊN TẮC KIẾN TRÚC
 

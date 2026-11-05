@@ -19,11 +19,15 @@ let areas = [];
 let draftPoints = [];
 let selectedAreaId = null;
 let isDrawing = false;
+let isChoosingUavPosition = false;
+let uavPosition = null;
+let uavMarker = null;
 let mapBridge = null;
 
 const savedAreaLayer = L.layerGroup().addTo(map);
 const draftLayer = L.layerGroup().addTo(map);
-const coverageLayer = L.layerGroup().addTo(map);
+const routeLayer = L.layerGroup().addTo(map);
+const waypointLayer = L.layerGroup().addTo(map);
 
 const countLabel = document.getElementById('area-count');
 const areaList = document.getElementById('area-list');
@@ -47,9 +51,38 @@ function showMessage(message) {
     document.getElementById('message').textContent = message;
 }
 
+function setUavPosition(latlng) {
+    uavPosition = {
+        lat: Number(latlng.lat.toFixed(7)),
+        lon: Number(latlng.lng.toFixed(7))
+    };
+
+    if (uavMarker) {
+        map.removeLayer(uavMarker);
+    }
+    uavMarker = L.circleMarker(
+        [uavPosition.lat, uavPosition.lon],
+        {
+            radius: 9,
+            color: '#1b5e20',
+            weight: 3,
+            fillColor: '#43a047',
+            fillOpacity: 1
+        }
+    ).bindTooltip('Vị trí UAV giả lập').addTo(map);
+    routeLayer.clearLayers();
+    waypointLayer.clearLayers();
+
+    showMessage(
+        `Đã chọn vị trí UAV: ${uavPosition.lat}, ${uavPosition.lon}. `
+        + 'Bấm lại nút chọn UAV để thoát chế độ.'
+    );
+}
+
 function renderSavedAreas() {
     savedAreaLayer.clearLayers();
-    coverageLayer.clearLayers();
+    routeLayer.clearLayers();
+    waypointLayer.clearLayers();
     while (areaList.firstChild) {
         areaList.removeChild(areaList.firstChild);
     }
@@ -75,7 +108,9 @@ function renderSavedAreas() {
 
             polygon.on('click', event => {
                 L.DomEvent.stopPropagation(event.originalEvent);
-                if (!isDrawing) {
+                if (isChoosingUavPosition) {
+                    setUavPosition(event.latlng);
+                } else if (!isDrawing) {
                     selectArea(area.id);
                 }
             });
@@ -96,7 +131,8 @@ function renderSavedAreas() {
 
 function renderDraft() {
     draftLayer.clearLayers();
-    coverageLayer.clearLayers();
+    routeLayer.clearLayers();
+    waypointLayer.clearLayers();
 
     draftPoints.forEach((point, index) => {
         L.marker([point.lat, point.lon])
@@ -141,6 +177,10 @@ function startDrawing() {
 }
 
 map.on('click', event => {
+    if (isChoosingUavPosition) {
+        setUavPosition(event.latlng);
+        return;
+    }
     if (!isDrawing) {
         return;
     }
@@ -162,6 +202,17 @@ document.getElementById('undo-point').addEventListener('click', () => {
 });
 
 document.getElementById('new-area').addEventListener('click', startDrawing);
+
+document.getElementById('choose-uav-position').addEventListener('click', event => {
+    isChoosingUavPosition = !isChoosingUavPosition;
+    event.currentTarget.classList.toggle('mode-active', isChoosingUavPosition);
+
+    if (isChoosingUavPosition) {
+        showMessage('Chế độ chọn UAV: click bản đồ để đặt hoặc dời chấm xanh.');
+    } else {
+        showMessage('Đã thoát chế độ chọn vị trí UAV.');
+    }
+});
 
 document.getElementById('cancel-drawing').addEventListener('click', () => {
     draftPoints = [];
@@ -224,20 +275,31 @@ document.getElementById('delete-area').addEventListener('click', () => {
         showMessage('Hãy chọn polygon cần xóa.');
         return;
     }
-    if (!window.confirm(`Xóa ${selectedArea.name}?`)) {
+    if (!window.confirm(
+            `Xóa ${selectedArea.name} và waypoint đã lưu của khu vực này?`)) {
+        return;
+    }
+    if (!mapBridge) {
+        showMessage('Chưa kết nối được với ứng dụng Python.');
         return;
     }
 
-    areas = areas.filter(area => area.id !== selectedAreaId);
+    const deletedAreaId = selectedArea.id;
+    areas = areas.filter(area => area.id !== deletedAreaId);
     selectedAreaId = areas.length > 0 ? areas[0].id : null;
     renderSavedAreas();
     saveAreas();
+    mapBridge.delete_waypoints_for_area(deletedAreaId);
 });
 
 document.getElementById('generate-path').addEventListener('click', () => {
     const selectedArea = getSelectedArea();
     if (!selectedArea) {
         showMessage('Hãy chọn một polygon trước khi tạo đường quét.');
+        return;
+    }
+    if (!uavPosition) {
+        showMessage('Hãy chọn vị trí UAV trước khi tạo waypoint.');
         return;
     }
     if (!mapBridge) {
@@ -247,7 +309,11 @@ document.getElementById('generate-path').addEventListener('click', () => {
 
     const spacing = Number(document.getElementById('spacing').value);
     mapBridge.generate_coverage_path(
-        JSON.stringify(selectedArea.coordinates), spacing
+        selectedArea.id,
+        selectedArea.name,
+        JSON.stringify(selectedArea.coordinates),
+        spacing,
+        JSON.stringify(uavPosition)
     );
 });
 
@@ -277,13 +343,29 @@ new QWebChannel(qt.webChannelTransport, channel => {
     });
     mapBridge.coverage_path_ready.connect(pathJson => {
         const coveragePath = JSON.parse(pathJson);
-        coverageLayer.clearLayers();
+        routeLayer.clearLayers();
+        waypointLayer.clearLayers();
 
-        coveragePath.segments.forEach(segment => {
-            L.polyline(
-                segment.map(point => [point.lat, point.lon]),
-                { color: '#e53935', weight: 3 }
-            ).addTo(coverageLayer);
+        const routePoints = [uavPosition, ...coveragePath.waypoints]
+            .map(point => [point.lat, point.lon]);
+        L.polyline(routePoints, {
+            color: '#d32f2f',
+            weight: 3,
+            opacity: 0.9,
+            dashArray: '8, 7'
+        }).addTo(routeLayer);
+
+        coveragePath.waypoints.forEach((point, index) => {
+            const firstWaypointClass = index === 0 ? ' waypoint-first' : '';
+            const icon = L.divIcon({
+                className: `waypoint-icon${firstWaypointClass}`,
+                html: `<span>${index + 1}</span>`,
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+            L.marker([point.lat, point.lon], { icon })
+                .bindTooltip(`Waypoint ${index + 1}`)
+                .addTo(waypointLayer);
         });
     });
     mapBridge.load_search_areas();
