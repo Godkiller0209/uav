@@ -1,89 +1,207 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 
 <head>
-
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bản đồ UAV SAR</title>
 
-    <title>UAV Map</title>
-
-    <!-- Thu vien CSS cua Leaflet -->
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     >
-
-    <!-- Thu vien JavaScript cua Leaflet -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
-    </script>
-
-    <!-- Thu vien cau noi Python - JavaScript -->
-    <script src="qrc:///qtwebchannel/qwebchannel.js">
-    </script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 
     <style>
+        :root {
+            color-scheme: dark;
+            --panel: #11223a;
+            --panel-border: #263d5c;
+            --text: #edf4ff;
+            --muted: #9db0c9;
+            --blue: #1769d2;
+            --blue-hover: #247de8;
+        }
+
+        * { box-sizing: border-box; }
 
         html, body {
             width: 100%;
             height: 100%;
             margin: 0;
+            overflow: hidden;
+            background: #0d1b2e;
+            color: var(--text);
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 14px;
         }
 
-        body {
-            display: flex;
-            flex-direction: column;
+        button, input, select { font: inherit; }
+
+        #map-workspace {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 326px;
+            gap: 10px;
+            overflow: hidden;
+            padding: 10px;
+            border: 1px solid #263d5c;
+            border-radius: 12px;
+            background: #0d1b2e;
+            box-shadow: 0 8px 25px #0003;
         }
 
         #map {
-            flex: 1;
+            width: 100%;
+            height: 100%;
+            min-width: 0;
             min-height: 0;
+            background: #d6e0e8;
         }
 
-        #toolbar {
-            box-sizing: border-box;
-            min-height: 54px;
+        #right-panel {
+            min-height: 0;
             display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-            padding: 8px;
-            font-family: sans-serif;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            background: var(--panel);
         }
 
-        button {
-            padding: 7px 12px;
-            cursor: pointer;
+        #map-panel-content {
+            min-height: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 13px;
+            overflow: auto;
         }
+
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+        }
+
+        .section-title {
+            margin: 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--panel-border);
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .field-label {
+            display: block;
+            margin-bottom: 5px;
+            color: #d4e0ef;
+            font-size: 13px;
+        }
+
+        .area-controls {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 40px 40px;
+            gap: 6px;
+        }
+
+        #area-list, #area-name, #spacing {
+            width: 100%;
+            min-height: 38px;
+            padding: 8px 10px;
+            border: 1px solid #304969;
+            border-radius: 7px;
+            outline: none;
+            color: var(--text);
+            background: #0d1a2c;
+        }
+
+        #area-list:focus, #area-name:focus, #spacing:focus {
+            border-color: #4792ef;
+        }
+
+        #area-name { min-width: 0; }
+
+        .button-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+        }
+
+        .control-button {
+            min-height: 37px;
+            padding: 7px 9px;
+            border: 1px solid #385474;
+            border-radius: 7px;
+            color: #e6eef9;
+            background: #1a2d48;
+            cursor: pointer;
+            transition: background 120ms ease, border-color 120ms ease;
+        }
+
+        .control-button:hover {
+            border-color: #5780ae;
+            background: #233b5d;
+        }
+
+        .control-button.primary {
+            min-height: 42px;
+            border-color: #2478dd;
+            background: linear-gradient(100deg, #1769d2, #1d70d7);
+            color: white;
+            font-weight: 700;
+        }
+
+        .control-button.primary:hover { background: var(--blue-hover); }
+
+        #choose-uav-position.mode-active {
+            border-color: #23a85c;
+            background: #155c38;
+            color: #eafff1;
+        }
+
+        .icon-button {
+            min-height: 38px;
+            border: 1px solid #304969;
+            border-radius: 7px;
+            color: #e4edf8;
+            background: #1a2d48;
+            cursor: pointer;
+            font-size: 17px;
+        }
+
+        .icon-button:hover { background: #294362; }
 
         #area-count {
-            margin-left: auto;
-            font-family: sans-serif;
+            color: var(--muted);
+            font-size: 12px;
         }
 
         #message {
-            width: 100%;
-            color: #333;
+            min-height: 42px;
+            padding: 9px 10px;
+            border: 1px solid #304969;
+            border-radius: 7px;
+            color: #dce8f7;
+            background: #0d1a2c;
+            font-size: 12px;
+            line-height: 1.4;
         }
 
         #coordinate-list {
-            box-sizing: border-box;
-            width: 100%;
-            max-height: 100px;
+            max-height: 105px;
             margin: 0;
             overflow: auto;
+            color: #b9cbe1;
             font-size: 11px;
+            white-space: pre-wrap;
         }
 
-        .mode-active {
-            background: #8bc34a;
-            border-color: #558b2f;
-            color: #102000;
-        }
-
-        .waypoint-icon {
-            background: transparent;
-            border: 0;
-        }
+        .waypoint-icon { background: transparent; border: 0; }
 
         .waypoint-icon span {
             display: block;
@@ -98,39 +216,60 @@
             box-shadow: 0 1px 4px #333;
         }
 
-        .waypoint-first span {
-            background: #ef6c00;
+        .waypoint-first span { background: #ef6c00; }
+
+        @media (max-width: 760px) {
+            #map-workspace {
+                grid-template-columns: minmax(0, 1fr) 285px;
+                padding: 5px;
+            }
         }
-
     </style>
-
 </head>
 
 <body>
+    <main id="map-workspace">
+        <div id="map" aria-label="Bản đồ khu vực tìm kiếm"></div>
 
-    <div id="toolbar">
-        <button id="new-area" type="button">Vẽ đa giác mới</button>
-        <button id="undo-point" type="button">Xóa điểm cuối</button>
-        <button id="finish-area" type="button">Hoàn thành và lưu</button>
-        <button id="cancel-drawing" type="button">Hủy vẽ</button>
-        <select id="area-list" aria-label="Chọn khu vực tìm kiếm">
-            <option value="">Chưa có khu vực</option>
-        </select>
-        <input id="area-name" type="text" placeholder="Tên khu vực">
-        <button id="rename-area" type="button">Đổi tên</button>
-        <button id="delete-area" type="button">Xóa khu vực đã chọn</button>
-        <button id="choose-uav-position" type="button">Chọn vị trí UAV</button>
-        <label for="spacing">Khoảng cách quét (m):</label>
-        <input id="spacing" type="number" min="1" step="1" value="20">
-        <button id="generate-path" type="button">Tạo tuyến tất cả khu vực</button>
-        <span id="area-count">0 khu vực</span>
-        <span id="message" role="status"></span>
-        <pre id="coordinate-list">Chọn một khu vực để xem tọa độ.</pre>
-    </div>
-    <div id="map"></div>
+        <aside id="right-panel" aria-label="Chức năng bản đồ">
+            <div id="map-panel-content">
+                <div class="section">
+                    <h2 class="section-title">Thao tác khu vực</h2>
+                    <div class="button-row">
+                        <button id="new-area" class="control-button" type="button">＋ Vẽ đa giác mới</button>
+                        <button id="undo-point" class="control-button" type="button">↶ Xóa điểm cuối</button>
+                        <button id="finish-area" class="control-button" type="button">✓ Hoàn thành và lưu</button>
+                        <button id="cancel-drawing" class="control-button" type="button">× Hủy vẽ</button>
+                    </div>
+                    <label class="field-label" for="area-list">Khu vực đã lưu</label>
+                    <div class="area-controls">
+                        <select id="area-list" aria-label="Chọn khu vực tìm kiếm">
+                            <option value="">Chưa có khu vực</option>
+                        </select>
+                        <button id="rename-area" class="icon-button" type="button" title="Đổi tên khu vực" aria-label="Đổi tên khu vực">✎</button>
+                        <button id="delete-area" class="icon-button" type="button" title="Xóa khu vực đã chọn" aria-label="Xóa khu vực đã chọn">⌫</button>
+                    </div>
+                    <input id="area-name" type="text" placeholder="Tên khu vực để đổi tên" aria-label="Tên khu vực">
+                    <span id="area-count">0 khu vực</span>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">Tạo tuyến bay</h2>
+                    <button id="choose-uav-position" class="control-button" type="button">📍 Chọn vị trí UAV</button>
+                    <label class="field-label" for="spacing">Khoảng cách quét (m)</label>
+                    <input id="spacing" type="number" min="1" step="1" value="20">
+                    <button id="generate-path" class="control-button primary" type="button">⚙ Tạo tuyến tất cả khu vực</button>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">Thông tin</h2>
+                    <div id="message" role="status" aria-live="polite">Click trên bản đồ để thêm các điểm khu vực.</div>
+                    <pre id="coordinate-list">Chọn một khu vực để xem tọa độ.</pre>
+                </div>
+            </div>
+        </aside>
+    </main>
 
     <script src="map.js"></script>
-
 </body>
-
 </html>

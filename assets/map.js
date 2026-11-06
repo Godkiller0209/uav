@@ -32,6 +32,8 @@ const waypointLayer = L.layerGroup().addTo(map);
 const countLabel = document.getElementById('area-count');
 const areaList = document.getElementById('area-list');
 
+window.invalidateMapSize = () => map.invalidateSize();
+
 function getSelectedArea() {
     return areas.find(area => area.id === selectedAreaId) || null;
 }
