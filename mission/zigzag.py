@@ -13,8 +13,14 @@ def create_zigzag_coverage_path(coordinates, spacing_m, uav_position):
     polygon = _validate_and_project_polygon(coordinates)
     _validate_gps_point(uav_position, "Vị trí UAV")
 
-    minimum_y = min(point[1] for point in polygon)
-    maximum_y = max(point[1] for point in polygon)
+    sweep_angle = _find_longest_edge_angle(polygon)
+    sweep_polygon = [
+        _rotate_to_sweep_frame(point, sweep_angle)
+        for point in polygon
+    ]
+
+    minimum_y = min(point[1] for point in sweep_polygon)
+    maximum_y = max(point[1] for point in sweep_polygon)
     area_height = maximum_y - minimum_y
     if area_height <= COORDINATE_EPSILON:
         raise ValueError("Khu vực quá hẹp để tạo đường quét.")
@@ -27,7 +33,7 @@ def create_zigzag_coverage_path(coordinates, spacing_m, uav_position):
     segments = []
     for lane_index in range(lane_count):
         scan_y = minimum_y + lane_spacing * (lane_index + 0.5)
-        intervals = _get_scan_intervals(polygon, scan_y)
+        intervals = _get_scan_intervals(sweep_polygon, scan_y)
 
         if lane_index % 2 == 1:
             intervals.reverse()
@@ -37,8 +43,14 @@ def create_zigzag_coverage_path(coordinates, spacing_m, uav_position):
                 start_x, end_x = end_x, start_x
 
             segment = [
-                _xy_to_gps(start_x, scan_y, origin_lat, origin_lon, latitude_scale),
-                _xy_to_gps(end_x, scan_y, origin_lat, origin_lon, latitude_scale),
+                _sweep_xy_to_gps(
+                    start_x, scan_y, sweep_angle,
+                    origin_lat, origin_lon, latitude_scale,
+                ),
+                _sweep_xy_to_gps(
+                    end_x, scan_y, sweep_angle,
+                    origin_lat, origin_lon, latitude_scale,
+                ),
             ]
             segments.append(segment)
 
@@ -53,6 +65,7 @@ def create_zigzag_coverage_path(coordinates, spacing_m, uav_position):
     return {
         "spacing_m": round(lane_spacing, 2),
         "lane_count": lane_count,
+        "scan_angle_degrees": round(math.degrees(sweep_angle), 2) % 180,
         "segments": segments,
         "waypoints": ordered_waypoints,
         "transit_segments": transit_segments,
@@ -114,6 +127,37 @@ def _get_origin(coordinates):
         raise ValueError("Mỗi điểm cần có trường lat và lon.") from None
 
     return sum(latitudes) / len(latitudes), sum(longitudes) / len(longitudes)
+
+
+def _find_longest_edge_angle(polygon):
+    """Góc của cạnh dài nhất; góc này sẽ là hướng chạy các làn quét."""
+    longest_length_squared = -1.0
+    longest_edge_angle = 0.0
+
+    for index, start_point in enumerate(polygon):
+        end_point = polygon[(index + 1) % len(polygon)]
+        delta_x = end_point[0] - start_point[0]
+        delta_y = end_point[1] - start_point[1]
+        edge_length_squared = delta_x ** 2 + delta_y ** 2
+
+        if edge_length_squared > longest_length_squared:
+            longest_length_squared = edge_length_squared
+            # Cạnh được xem là một trục không hướng: góc theta và theta + 180°
+            # biểu diễn cùng hướng quét. Chuẩn hóa để kết quả ổn định hơn.
+            longest_edge_angle = math.atan2(delta_y, delta_x) % math.pi
+
+    return longest_edge_angle
+
+
+def _rotate_to_sweep_frame(point, angle):
+    """Xoay XY để cạnh dài nhất song song trục X tạm thời."""
+    x, y = point
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    return (
+        x * cosine + y * sine,
+        -x * sine + y * cosine,
+    )
 
 
 def _validate_gps_point(point, label):
@@ -219,6 +263,17 @@ def _xy_to_gps(x, y, origin_lat, origin_lon, latitude_scale):
         x / (EARTH_RADIUS_M * latitude_scale)
     )
     return {"lat": round(latitude, 7), "lon": round(longitude, 7)}
+
+
+def _sweep_xy_to_gps(
+        sweep_x, sweep_y, sweep_angle,
+        origin_lat, origin_lon, latitude_scale):
+    """Xoay tọa độ làn về XY cục bộ ban đầu rồi đổi lại thành GPS."""
+    cosine = math.cos(sweep_angle)
+    sine = math.sin(sweep_angle)
+    x = sweep_x * cosine - sweep_y * sine
+    y = sweep_x * sine + sweep_y * cosine
+    return _xy_to_gps(x, y, origin_lat, origin_lon, latitude_scale)
 
 
 def _signed_area(polygon):

@@ -20,7 +20,7 @@ class GPSMap(QWidget):
         super().__init__()
 
         self.setWindowTitle("UAV Map GUI")
-        self.resize(1200, 750)
+        self.resize(1280, 820)
 
         self.map_view = QWebEngineView()
         self.bridge = MapBridge()
@@ -33,7 +33,7 @@ class GPSMap(QWidget):
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("UAV SEARCH AREA MAP"))
-        layout.addWidget(self.map_view)
+        layout.addWidget(self.map_view, 1)
         layout.addWidget(self.status_label)
         self.setLayout(layout)
 

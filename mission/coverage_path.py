@@ -58,6 +58,7 @@ def create_multi_area_coverage_path(
             "area_name": area_name,
             "lane_count": area_path["lane_count"],
             "spacing_m": area_path["spacing_m"],
+            "scan_angle_degrees": area_path["scan_angle_degrees"],
             "waypoint_start": waypoint_start,
             "waypoint_end": waypoint_end,
         })
