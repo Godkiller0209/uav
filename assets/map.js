@@ -51,6 +51,11 @@ function showMessage(message) {
     document.getElementById('message').textContent = message;
 }
 
+function clearDisplayedRoute() {
+    routeLayer.clearLayers();
+    waypointLayer.clearLayers();
+}
+
 function setUavPosition(latlng) {
     uavPosition = {
         lat: Number(latlng.lat.toFixed(7)),
@@ -70,8 +75,10 @@ function setUavPosition(latlng) {
             fillOpacity: 1
         }
     ).bindTooltip('Vị trí UAV giả lập').addTo(map);
-    routeLayer.clearLayers();
-    waypointLayer.clearLayers();
+    clearDisplayedRoute();
+    if (mapBridge) {
+        mapBridge.clear_saved_waypoints();
+    }
 
     showMessage(
         `Đã chọn vị trí UAV: ${uavPosition.lat}, ${uavPosition.lon}. `
@@ -81,8 +88,6 @@ function setUavPosition(latlng) {
 
 function renderSavedAreas() {
     savedAreaLayer.clearLayers();
-    routeLayer.clearLayers();
-    waypointLayer.clearLayers();
     while (areaList.firstChild) {
         areaList.removeChild(areaList.firstChild);
     }
@@ -131,8 +136,7 @@ function renderSavedAreas() {
 
 function renderDraft() {
     draftLayer.clearLayers();
-    routeLayer.clearLayers();
-    waypointLayer.clearLayers();
+    clearDisplayedRoute();
 
     draftPoints.forEach((point, index) => {
         L.marker([point.lat, point.lon])
@@ -265,6 +269,7 @@ document.getElementById('rename-area').addEventListener('click', () => {
         return;
     }
     selectedArea.name = newName;
+    clearDisplayedRoute();
     renderSavedAreas();
     saveAreas();
 });
@@ -276,7 +281,7 @@ document.getElementById('delete-area').addEventListener('click', () => {
         return;
     }
     if (!window.confirm(
-            `Xóa ${selectedArea.name} và waypoint đã lưu của khu vực này?`)) {
+            `Xóa ${selectedArea.name}? Tuyến waypoint hiện tại sẽ bị xóa và cần tạo lại.`)) {
         return;
     }
     if (!mapBridge) {
@@ -287,15 +292,14 @@ document.getElementById('delete-area').addEventListener('click', () => {
     const deletedAreaId = selectedArea.id;
     areas = areas.filter(area => area.id !== deletedAreaId);
     selectedAreaId = areas.length > 0 ? areas[0].id : null;
+    clearDisplayedRoute();
     renderSavedAreas();
     saveAreas();
-    mapBridge.delete_waypoints_for_area(deletedAreaId);
 });
 
 document.getElementById('generate-path').addEventListener('click', () => {
-    const selectedArea = getSelectedArea();
-    if (!selectedArea) {
-        showMessage('Hãy chọn một polygon trước khi tạo đường quét.');
+    if (areas.length === 0) {
+        showMessage('Hãy lưu ít nhất một polygon trước khi tạo tuyến.');
         return;
     }
     if (!uavPosition) {
@@ -309,9 +313,7 @@ document.getElementById('generate-path').addEventListener('click', () => {
 
     const spacing = Number(document.getElementById('spacing').value);
     mapBridge.generate_coverage_path(
-        selectedArea.id,
-        selectedArea.name,
-        JSON.stringify(selectedArea.coordinates),
+        JSON.stringify(areas),
         spacing,
         JSON.stringify(uavPosition)
     );
