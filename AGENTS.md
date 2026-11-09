@@ -57,11 +57,13 @@ uav_code/
 │   ├── __init__.py
 │   ├── main_window.py
 │   └── map_bridge.py
-├── mission/
+├── coverage_path_planning/
 │   ├── __init__.py
 │   ├── coverage_path.py
 │   ├── zigzag.py
 │   └── waypoint_store.py
+├── mission/
+│   └── __init__.py
 ├── assets/
 │   ├── map.html
 │   └── map.js
@@ -75,15 +77,16 @@ Các thành phần đã có:
 - `GUI/main_window.py`: tạo cửa sổ PyQt5, nhúng trang bản đồ và thiết lập QWebChannel.
 - `GUI/map_bridge.py`: nạp/lưu danh sách polygon qua QWebChannel, kiểm tra dữ liệu, đọc định dạng cũ nếu có, gọi lập tuyến nhiều khu vực và lưu waypoint.
 - `GUI/__init__.py`: đánh dấu `GUI` là package Python.
-- `mission/coverage_path.py`: điều phối thuật toán tạo tuyến qua toàn bộ khu vực theo thứ tự danh sách.
-- `mission/zigzag.py`: chuyển từng polygon GPS sang XY cục bộ, tìm cạnh dài nhất, tạo làn Zigzag song song với cạnh đó và sắp waypoint dựa trên vị trí bắt đầu.
-- `mission/waypoint_store.py`: lưu tuyến tổng hợp vào `data/waypoints.json` và xóa tuyến khi danh sách khu vực hoặc vị trí bắt đầu UAV thay đổi.
-- `mission/__init__.py`: đánh dấu `mission` là package Python.
+- `coverage_path_planning/coverage_path.py`: điều phối thuật toán tạo tuyến qua toàn bộ khu vực theo thứ tự danh sách.
+- `coverage_path_planning/zigzag.py`: chuyển từng polygon GPS sang XY cục bộ, tìm cạnh dài nhất, tạo làn Zigzag song song với cạnh đó và sắp waypoint dựa trên vị trí bắt đầu.
+- `coverage_path_planning/waypoint_store.py`: lưu tuyến tổng hợp waypoint hình học vào `data/waypoints.json` và xóa tuyến khi danh sách khu vực hoặc vị trí bắt đầu UAV thay đổi.
+- `coverage_path_planning/__init__.py`: đánh dấu package lập kế hoạch đường bao phủ.
+- `mission/__init__.py`: package dự kiến quản lý mission thực thi riêng cho từng UAV; hiện chưa triển khai module lệnh.
 - `assets/map.html` và `assets/map.js`: trang Leaflet, quản lý nhiều polygon, chọn vị trí UAV giả lập và hiển thị tuyến cùng waypoint.
 - `data/search_areas.json`: dữ liệu hiện tại chứa danh sách nhiều polygon. `.gitignore` bỏ qua file dữ liệu cục bộ này.
 - `data/waypoints.json`: lưu tuyến Zigzag liên tục mới nhất qua toàn bộ polygon; schema version 2; `.gitignore` bỏ qua dữ liệu tọa độ cục bộ.
 - File `data/search_area.json` theo định dạng cũ đã được xóa sau khi người dùng yêu cầu. Mã bridge vẫn giữ khả năng đọc file cũ nếu file đó có ở một bản cài đặt khác.
-- Python đã tạo các thư mục `__pycache__` trong `GUI/` và `mission/`. Đây là bytecode tự sinh khi Python nạp module; chúng không phải mã nguồn. Sự tồn tại của chúng xác nhận các module đã được nạp ít nhất một lần, nhưng không xác nhận thao tác vẽ polygon hoặc tạo đường quét chạy đúng.
+- Python có thể tạo các thư mục `__pycache__` khi nạp module; đây là bytecode tự sinh, không phải mã nguồn và không xác nhận thao tác vẽ polygon hoặc tạo đường quét chạy đúng.
 - PyQt5, PyQtWebEngine, Leaflet và MapTiler được dùng trong ứng dụng. Bản đồ cần kết nối internet để tải tài nguyên bên ngoài.
 
 Tiến độ chức năng:
@@ -149,7 +152,7 @@ Chưa cần kết nối PX4 hoặc Gazebo trong giai đoạn 2.
 
 Mục tiêu là chuyển polygon GPS sang hệ tọa độ phẳng cục bộ, tạo các làn quét bên trong polygon và hiển thị kết quả trên bản đồ.
 
-- `mission/zigzag.py` dùng phép chiếu equirectangular cục bộ quanh tâm gần đúng của từng polygon, tính bằng mét; `mission/coverage_path.py` điều phối nhiều polygon.
+- `coverage_path_planning/zigzag.py` dùng phép chiếu equirectangular cục bộ quanh tâm gần đúng của từng polygon, tính bằng mét; `coverage_path_planning/coverage_path.py` điều phối nhiều polygon.
 - Mỗi polygon tự tìm cạnh dài nhất trong XY và tạo các làn song song với cạnh đó. Khoảng cách người dùng nhập là khoảng cách tối đa giữa các làn; thuật toán chia đều polygon theo chiều cao trong hệ đã xoay.
 - Mỗi đoạn giao của một làn quét với polygon được dùng nội bộ để lập tuyến; không hiển thị riêng các đoạn quét. Tuyến waypoint liên tục được vẽ bằng nét đứt màu đỏ.
 - Người dùng có thể bật/tắt chế độ chọn vị trí UAV; click bản đồ đặt hoặc dời marker xanh lá. Vị trí này chỉ tồn tại trong phiên hiện tại.
@@ -166,7 +169,8 @@ Kiến trúc dự kiến trong tương lai:
 
 - `GUI/`: các thành phần giao diện PyQt5.
 - `web/` hoặc `assets/`: HTML, CSS, JavaScript và tài nguyên bản đồ.
-- `mission/`: xử lý khu vực, sinh đường bay và phân công nhiệm vụ.
+- `coverage_path_planning/`: xử lý hình học polygon và sinh đường bay bao phủ; không điều khiển UAV.
+- `mission/`: lưu và mô tả mission thực thi riêng cho từng UAV, gồm các thao tác cơ bản và chuỗi thao tác/waypoint; phần này sẽ được triển khai sau.
 - `drone/`: đối tượng UAV, lệnh điều khiển và telemetry.
 - `communication/`: giao tiếp MAVSDK/MAVLink.
 - `simulation/`: hỗ trợ khởi chạy và quản lý mô phỏng.
@@ -279,7 +283,7 @@ Giai đoạn 8: Hoàn thiện GUI, ghi log, đánh giá hiệu quả và viết 
 
 ## 10. YÊU CẦU KHI BẮT ĐẦU LÀM VIỆC
 
-Trước khi sửa đổi, hãy đọc file AGENTS.md và kiểm tra các file liên quan trong cấu trúc hiện tại: `main.py`, `GUI/main_window.py`, `GUI/map_bridge.py`, `assets/map.html`, `assets/map.js` và module nghiệp vụ tương ứng trong `mission/`.
+Trước khi sửa đổi, hãy đọc file AGENTS.md và kiểm tra các file liên quan trong cấu trúc hiện tại: `main.py`, `GUI/main_window.py`, `GUI/map_bridge.py`, `assets/map.html`, `assets/map.js` và module nghiệp vụ tương ứng trong `coverage_path_planning/` hoặc `mission/`.
 
 Ở đầu một nhiệm vụ mới, hãy xác định giai đoạn hiện tại từ code thực tế, phân biệt phần đã viết với phần đã chạy xác nhận, rồi nêu ngắn gọn kế hoạch nếu công việc có thay đổi nhiều thành phần. Không dựa vào đường dẫn file cũ như `GUI/gui_1.py` nếu file đó không còn tồn tại.
 

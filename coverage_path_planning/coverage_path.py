@@ -1,6 +1,6 @@
 """Điểm vào chung để chọn thuật toán tạo đường bao phủ khu vực."""
 
-from mission.zigzag import create_zigzag_coverage_path
+from coverage_path_planning.zigzag import create_zigzag_coverage_path
 
 
 def create_coverage_path(

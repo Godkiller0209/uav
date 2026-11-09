@@ -7,8 +7,8 @@ import uuid
 
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from mission.coverage_path import create_multi_area_coverage_path
-from mission.waypoint_store import (
+from coverage_path_planning.coverage_path import create_multi_area_coverage_path
+from coverage_path_planning.waypoint_store import (
     clear_saved_waypoints as clear_waypoint_routes,
     remove_waypoint_routes_not_matching_areas,
     save_waypoints,

@@ -5,11 +5,12 @@ waypoint bao phủ khu vực.
 
 ## Tổ chức phần tạo đường bay
 
-- `mission/zigzag.py`: đổi một polygon GPS sang XY cục bộ, tìm cạnh dài nhất,
+- `coverage_path_planning/zigzag.py`: đổi một polygon GPS sang XY cục bộ, tìm cạnh dài nhất,
   xoay hệ quét theo cạnh đó rồi tạo và sắp thứ tự waypoint Zigzag.
-- `mission/coverage_path.py`: điều phối Zigzag qua toàn bộ polygon theo thứ tự
+- `coverage_path_planning/coverage_path.py`: điều phối Zigzag qua toàn bộ polygon theo thứ tự
   danh sách, dùng waypoint cuối khu vực trước để chọn đầu vào khu vực kế tiếp.
-- `mission/waypoint_store.py`: lưu tuyến waypoint đã tạo vào JSON.
+- `coverage_path_planning/waypoint_store.py`: lưu tuyến waypoint đã tạo vào JSON.
+- `mission/`: dành cho dữ liệu và các bước thực thi mission riêng của từng UAV.
 - `data/waypoints.json`: tuyến Zigzag mới nhất đi qua toàn bộ polygon; file này
   được Git bỏ qua vì có thể chứa tọa độ khu vực thực tế.
 
