@@ -1,0 +1,3 @@
+PyQt5
+PyQtWebEngine
+mavsdk==4.0.6

@@ -4,6 +4,7 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -38,6 +39,12 @@ class GPSMap(QWidget):
         self.map_view = self.map_page.map_view
         self.bridge = self.map_page.bridge
         self.uav_page = UavPage(self)
+        self.uav_page.connection_state_changed.connect(
+            self._update_connection_header
+        )
+        self.uav_page.telemetry_updated.connect(
+            self._publish_live_telemetry_to_map
+        )
 
         self.pages = QStackedWidget()
         self.pages.setObjectName("pages")
@@ -60,13 +67,13 @@ class GPSMap(QWidget):
         header_layout.setContentsMargins(18, 0, 20, 0)
         brand = QLabel("🧭  UAV Search & Rescue")
         brand.setStyleSheet("font-size: 18px; font-weight: 700; border: 0;")
-        connection_status = QLabel("●  Chưa kết nối UAV")
-        connection_status.setStyleSheet(
+        self.connection_status = QLabel("●  Chưa kết nối UAV")
+        self.connection_status.setStyleSheet(
             "color: #d6e3f5; font-size: 13px; border: 0;"
         )
         header_layout.addWidget(brand)
         header_layout.addStretch(1)
-        header_layout.addWidget(connection_status)
+        header_layout.addWidget(self.connection_status)
         root_layout.addWidget(header)
 
         body = QWidget(self)
@@ -156,3 +163,35 @@ class GPSMap(QWidget):
         self.pages.setCurrentWidget(self.uav_page)
         self.map_nav_button.setChecked(False)
         self.uav_nav_button.setChecked(True)
+
+    def _update_connection_header(self, connected, message):
+        self.connection_status.setText(
+            f"●  {'UAV kết nối' if connected else 'Chưa kết nối UAV'}"
+        )
+        self.connection_status.setToolTip(message)
+        color = "#81c784" if connected else "#d6e3f5"
+        self.connection_status.setStyleSheet(
+            f"color: {color}; font-size: 13px; border: 0;"
+        )
+
+    def _publish_live_telemetry_to_map(self, snapshot):
+        self.bridge.set_live_uav_telemetry(snapshot)
+
+    def closeEvent(self, event):
+        if self.uav_page.drone_client.isRunning():
+            telemetry = self.uav_page._telemetry_snapshot
+            if (telemetry.get("connected")
+                    and telemetry.get("in_air") is True):
+                answer = QMessageBox.warning(
+                    self,
+                    "UAV đang bay",
+                    "Đóng ứng dụng sẽ ngắt kênh telemetry; PX4 sẽ tự xử lý theo failsafe "
+                    "đã cấu hình. Bạn có chắc muốn đóng không?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if answer != QMessageBox.Yes:
+                    event.ignore()
+                    return
+            self.uav_page.drone_client.stop_worker()
+        event.accept()

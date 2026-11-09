@@ -29,6 +29,49 @@ class MapBridge(QObject):
     search_areas_loaded = pyqtSignal(str)
     search_areas_saved = pyqtSignal(str)
     coverage_path_ready = pyqtSignal(str)
+    mission_route_changed = pyqtSignal(str)
+    live_uav_telemetry_changed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mission_waypoints = []
+        self._live_uav_telemetry = {"connected": False}
+
+    def set_mission_route(self, waypoints):
+        """Tampilkan route Mission tanpa menulis atau mengubah data sumber."""
+        if not isinstance(waypoints, list):
+            raise ValueError("Waypoint Mission phải là một danh sách.")
+        for index, point in enumerate(waypoints, start=1):
+            self._validate_gps_point(point, f"Waypoint Mission {index}")
+
+        self._mission_waypoints = [
+            {"lat": float(point["lat"]), "lon": float(point["lon"])}
+            for point in waypoints
+        ]
+        self.mission_route_changed.emit(
+            json.dumps(self._mission_waypoints, ensure_ascii=False)
+        )
+
+    def clear_mission_route(self):
+        self._mission_waypoints = []
+        self.mission_route_changed.emit("[]")
+
+    def set_live_uav_telemetry(self, telemetry):
+        """Phát telemetry thật để JavaScript di chuyển marker UAV."""
+        if not isinstance(telemetry, dict):
+            raise ValueError("Telemetry UAV phải là một object.")
+        self._live_uav_telemetry = dict(telemetry)
+        self.live_uav_telemetry_changed.emit(
+            json.dumps(self._live_uav_telemetry, ensure_ascii=False)
+        )
+
+    @pyqtSlot(result=str)
+    def latest_mission_route(self):
+        return json.dumps(self._mission_waypoints, ensure_ascii=False)
+
+    @pyqtSlot(result=str)
+    def latest_live_uav_telemetry(self):
+        return json.dumps(self._live_uav_telemetry, ensure_ascii=False)
 
     @pyqtSlot()
     def load_search_areas(self):
@@ -161,13 +204,43 @@ class MapBridge(QObject):
                 "schema_version": SEARCH_AREAS_SCHEMA_VERSION,
                 "areas": areas,
             })
-            uav_position = json.loads(uav_json)
+
+            live_telemetry = self._live_uav_telemetry
+            has_live_position = (
+                live_telemetry.get("connected") is True
+                and live_telemetry.get("lat") is not None
+                and live_telemetry.get("lon") is not None
+            )
+            if has_live_position:
+                uav_position = {
+                    "lat": float(live_telemetry["lat"]),
+                    "lon": float(live_telemetry["lon"]),
+                }
+                self._validate_gps_point(uav_position, "GPS Telemetry UAV")
+                start_source = "telemetry"
+            else:
+                uav_position = json.loads(uav_json)
+                if uav_position is None:
+                    raise ValueError(
+                        "Chưa có GPS Telemetry UAV hoặc vị trí giả lập. "
+                        "Hãy kết nối UAV để lấy điểm gốc thật, hoặc chọn vị trí "
+                        "giả lập khi làm việc offline."
+                    )
+                self._validate_gps_point(uav_position, "Vị trí UAV giả lập")
+                uav_position = {
+                    "lat": float(uav_position["lat"]),
+                    "lon": float(uav_position["lon"]),
+                }
+                start_source = "manual"
+
             coverage_path = create_multi_area_coverage_path(
                 areas,
                 spacing_m,
                 uav_position,
                 algorithm="zigzag",
             )
+            coverage_path["start_position"] = uav_position
+            coverage_path["start_source"] = start_source
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             self.status_changed.emit(f"Không thể tạo đường quét: {error}")
             return
@@ -194,7 +267,8 @@ class MapBridge(QObject):
             f"Đã tạo tuyến qua {len(coverage_path['areas'])} khu vực, "
             f"{coverage_path['lane_count']} làn quét, "
             f"{len(coverage_path['waypoints'])} waypoint, "
-            f"khoảng cách tối đa {coverage_path['spacing_m']} m. "
+            f"khoảng cách tối đa {coverage_path['spacing_m']} m; "
+            f"điểm gốc từ {'GPS Telemetry UAV' if start_source == 'telemetry' else 'vị trí giả lập'}. "
             "Đã lưu vào data/waypoints.json."
         )
 
@@ -217,3 +291,18 @@ class MapBridge(QObject):
                     or not -90 <= latitude <= 90
                     or not -180 <= longitude <= 180):
                 raise ValueError(f"Tọa độ điểm {index} nằm ngoài giới hạn GPS.")
+
+    @staticmethod
+    def _validate_gps_point(point, label):
+        if not isinstance(point, dict) or not {"lat", "lon"}.issubset(point):
+            raise ValueError(f"{label} phải có lat và lon.")
+        latitude = point["lat"]
+        longitude = point["lon"]
+        if (isinstance(latitude, bool) or isinstance(longitude, bool)
+                or not isinstance(latitude, (int, float))
+                or not isinstance(longitude, (int, float))):
+            raise ValueError(f"{label}: lat/lon phải là số.")
+        if (not math.isfinite(latitude) or not math.isfinite(longitude)
+                or not -90 <= latitude <= 90
+                or not -180 <= longitude <= 180):
+            raise ValueError(f"{label}: tọa độ nằm ngoài giới hạn GPS.")

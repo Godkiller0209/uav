@@ -218,6 +218,21 @@
 
         .waypoint-first span { background: #ef6c00; }
 
+        .live-uav-icon {
+            border: 0;
+            background: transparent;
+            color: #0d47a1;
+            font-size: 29px;
+            line-height: 32px;
+            text-align: center;
+            text-shadow: 0 1px 3px #fff, 0 0 5px #fff;
+        }
+
+        .live-uav-icon span {
+            display: block;
+            transform-origin: center;
+        }
+
         @media (max-width: 760px) {
             #map-workspace {
                 grid-template-columns: minmax(0, 1fr) 285px;
@@ -255,7 +270,7 @@
 
                 <div class="section">
                     <h2 class="section-title">Tạo tuyến bay</h2>
-                    <button id="choose-uav-position" class="control-button" type="button">📍 Chọn vị trí UAV</button>
+                    <button id="choose-uav-position" class="control-button" type="button">📍 Điểm gốc giả lập (offline)</button>
                     <label class="field-label" for="spacing">Khoảng cách quét (m)</label>
                     <input id="spacing" type="number" min="1" step="1" value="20">
                     <button id="generate-path" class="control-button primary" type="button">⚙ Tạo tuyến tất cả khu vực</button>

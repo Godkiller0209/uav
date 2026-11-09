@@ -23,11 +23,20 @@ let isChoosingUavPosition = false;
 let uavPosition = null;
 let uavMarker = null;
 let mapBridge = null;
+let liveUavTelemetry = { connected: false };
+let routeStartPosition = null;
+let routeStartSource = null;
+let liveUavMarker = null;
+let liveTrackPoints = [];
 
 const savedAreaLayer = L.layerGroup().addTo(map);
 const draftLayer = L.layerGroup().addTo(map);
 const routeLayer = L.layerGroup().addTo(map);
 const waypointLayer = L.layerGroup().addTo(map);
+const missionRouteLayer = L.layerGroup().addTo(map);
+const missionWaypointLayer = L.layerGroup().addTo(map);
+const liveTrackLayer = L.layerGroup().addTo(map);
+const liveUavLayer = L.layerGroup().addTo(map);
 
 const countLabel = document.getElementById('area-count');
 const areaList = document.getElementById('area-list');
@@ -56,6 +65,136 @@ function showMessage(message) {
 function clearDisplayedRoute() {
     routeLayer.clearLayers();
     waypointLayer.clearLayers();
+    routeStartPosition = null;
+    routeStartSource = null;
+}
+
+function renderMissionRoute(waypoints) {
+    missionRouteLayer.clearLayers();
+    missionWaypointLayer.clearLayers();
+    if (!Array.isArray(waypoints) || waypoints.length === 0) {
+        return;
+    }
+
+    const points = waypoints.map(point => [point.lat, point.lon]);
+    L.polyline(points, {
+        color: '#00acc1',
+        weight: 4,
+        opacity: 0.9
+    }).addTo(missionRouteLayer);
+
+    waypoints.forEach((point, index) => {
+        L.circleMarker([point.lat, point.lon], {
+            radius: 5,
+            color: '#004d5a',
+            weight: 2,
+            fillColor: '#26c6da',
+            fillOpacity: 1
+        }).bindTooltip(`Mission Waypoint ${index + 1}`).addTo(missionWaypointLayer);
+    });
+}
+
+function clearLiveUav() {
+    liveUavLayer.clearLayers();
+    liveTrackLayer.clearLayers();
+    liveUavMarker = null;
+    liveTrackPoints = [];
+}
+
+function hasValidLiveUavPosition(telemetry) {
+    return Boolean(
+        telemetry
+        && telemetry.connected
+        && Number.isFinite(telemetry.lat)
+        && Number.isFinite(telemetry.lon)
+    );
+}
+
+function updateStartPositionButton() {
+    const button = document.getElementById('choose-uav-position');
+    if (!button) {
+        return;
+    }
+
+    if (hasValidLiveUavPosition(liveUavTelemetry)) {
+        isChoosingUavPosition = false;
+        button.disabled = true;
+        button.classList.remove('mode-active');
+        button.textContent = '✓ GPS UAV thật đang dùng';
+        button.title = 'Điểm gốc tạo waypoint lấy từ GPS Telemetry hiện tại.';
+
+        if (uavMarker) {
+            map.removeLayer(uavMarker);
+            uavMarker = null;
+        }
+        uavPosition = null;
+        return;
+    }
+
+    button.disabled = false;
+    button.textContent = '📍 Điểm gốc giả lập (offline)';
+    button.title = 'Chỉ dùng làm điểm gốc khi chưa có GPS Telemetry thật.';
+}
+
+function updateLiveUav(telemetry) {
+    const hadLivePosition = hasValidLiveUavPosition(liveUavTelemetry);
+    liveUavTelemetry = telemetry && typeof telemetry === 'object'
+        ? { ...telemetry }
+        : { connected: false };
+    const hasLivePosition = hasValidLiveUavPosition(liveUavTelemetry);
+
+    if (!hadLivePosition && hasLivePosition && routeStartSource === 'manual') {
+        clearDisplayedRoute();
+        if (mapBridge) {
+            mapBridge.clear_saved_waypoints();
+        }
+    }
+
+    updateStartPositionButton();
+    if (!hasLivePosition) {
+        clearLiveUav();
+        return;
+    }
+
+    const position = [liveUavTelemetry.lat, liveUavTelemetry.lon];
+    const previous = liveTrackPoints[liveTrackPoints.length - 1];
+    if (!previous || previous[0] !== position[0] || previous[1] !== position[1]) {
+        liveTrackPoints.push(position);
+        if (liveTrackPoints.length > 2000) {
+            liveTrackPoints.shift();
+        }
+        liveTrackLayer.clearLayers();
+        if (liveTrackPoints.length > 1) {
+            L.polyline(liveTrackPoints, {
+                color: '#1565c0',
+                weight: 4,
+                opacity: 0.8
+            }).addTo(liveTrackLayer);
+        }
+    }
+
+    const heading = Number.isFinite(liveUavTelemetry.heading_deg)
+        ? liveUavTelemetry.heading_deg
+        : 0;
+    const icon = L.divIcon({
+        className: 'live-uav-icon',
+        html: `<span style="transform: rotate(${heading}deg)">▲</span>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+    });
+    if (!liveUavMarker) {
+        liveUavMarker = L.marker(position, { icon }).addTo(liveUavLayer);
+    } else {
+        liveUavMarker.setLatLng(position);
+        liveUavMarker.setIcon(icon);
+    }
+
+    const altitude = Number.isFinite(liveUavTelemetry.relative_altitude_m)
+        ? `${liveUavTelemetry.relative_altitude_m.toFixed(1)} m` : '—';
+    liveUavMarker.bindTooltip(
+        `UAV 1 · Telemetry thật<br>${liveUavTelemetry.lat.toFixed(7)}, `
+        + `${liveUavTelemetry.lon.toFixed(7)}<br>Độ cao tương đối: ${altitude}`
+    );
 }
 
 function setUavPosition(latlng) {
@@ -76,15 +215,15 @@ function setUavPosition(latlng) {
             fillColor: '#43a047',
             fillOpacity: 1
         }
-    ).bindTooltip('Vị trí UAV giả lập').addTo(map);
+    ).bindTooltip('Điểm gốc giả lập (offline)').addTo(map);
     clearDisplayedRoute();
     if (mapBridge) {
         mapBridge.clear_saved_waypoints();
     }
 
     showMessage(
-        `Đã chọn vị trí UAV: ${uavPosition.lat}, ${uavPosition.lon}. `
-        + 'Bấm lại nút chọn UAV để thoát chế độ.'
+        `Đã chọn điểm gốc giả lập: ${uavPosition.lat}, ${uavPosition.lon}. `
+        + 'Bấm lại nút để thoát chế độ chọn.'
     );
 }
 
@@ -210,13 +349,18 @@ document.getElementById('undo-point').addEventListener('click', () => {
 document.getElementById('new-area').addEventListener('click', startDrawing);
 
 document.getElementById('choose-uav-position').addEventListener('click', event => {
+    if (hasValidLiveUavPosition(liveUavTelemetry)) {
+        showMessage('Đang có GPS Telemetry thật; điểm gốc ảo đã bị vô hiệu hóa.');
+        return;
+    }
+
     isChoosingUavPosition = !isChoosingUavPosition;
     event.currentTarget.classList.toggle('mode-active', isChoosingUavPosition);
 
     if (isChoosingUavPosition) {
-        showMessage('Chế độ chọn UAV: click bản đồ để đặt hoặc dời chấm xanh.');
+        showMessage('Chế độ offline: click bản đồ để chọn điểm gốc giả lập màu xanh.');
     } else {
-        showMessage('Đã thoát chế độ chọn vị trí UAV.');
+        showMessage('Đã thoát chế độ chọn điểm gốc giả lập.');
     }
 });
 
@@ -304,21 +448,38 @@ document.getElementById('generate-path').addEventListener('click', () => {
         showMessage('Hãy lưu ít nhất một polygon trước khi tạo tuyến.');
         return;
     }
-    if (!uavPosition) {
-        showMessage('Hãy chọn vị trí UAV trước khi tạo waypoint.');
-        return;
-    }
     if (!mapBridge) {
         showMessage('Chưa kết nối được với ứng dụng Python.');
         return;
     }
 
     const spacing = Number(document.getElementById('spacing').value);
-    mapBridge.generate_coverage_path(
-        JSON.stringify(areas),
-        spacing,
-        JSON.stringify(uavPosition)
-    );
+    mapBridge.latest_live_uav_telemetry(telemetryJson => {
+        let telemetry;
+        try {
+            telemetry = JSON.parse(telemetryJson);
+        } catch (error) {
+            showMessage(`Không đọc được GPS Telemetry UAV: ${error}`);
+            return;
+        }
+
+        updateLiveUav(telemetry);
+        const startPosition = hasValidLiveUavPosition(telemetry)
+            ? { lat: telemetry.lat, lon: telemetry.lon }
+            : uavPosition;
+        if (!startPosition) {
+            showMessage(
+                'Chưa có GPS UAV thật. Hãy kết nối UAV hoặc chọn điểm gốc giả lập offline.'
+            );
+            return;
+        }
+
+        mapBridge.generate_coverage_path(
+            JSON.stringify(areas),
+            spacing,
+            JSON.stringify(startPosition)
+        );
+    });
 });
 
 new QWebChannel(qt.webChannelTransport, channel => {
@@ -347,10 +508,17 @@ new QWebChannel(qt.webChannelTransport, channel => {
     });
     mapBridge.coverage_path_ready.connect(pathJson => {
         const coveragePath = JSON.parse(pathJson);
+        routeStartPosition = coveragePath.start_position
+            || (hasValidLiveUavPosition(liveUavTelemetry)
+                ? { lat: liveUavTelemetry.lat, lon: liveUavTelemetry.lon }
+                : uavPosition);
+        routeStartSource = coveragePath.start_source
+            || (hasValidLiveUavPosition(liveUavTelemetry) ? 'telemetry' : 'manual');
         routeLayer.clearLayers();
         waypointLayer.clearLayers();
 
-        const routePoints = [uavPosition, ...coveragePath.waypoints]
+        const routePoints = [routeStartPosition, ...coveragePath.waypoints]
+            .filter(Boolean)
             .map(point => [point.lat, point.lon]);
         L.polyline(routePoints, {
             color: '#d32f2f',
@@ -371,6 +539,18 @@ new QWebChannel(qt.webChannelTransport, channel => {
                 .bindTooltip(`Waypoint ${index + 1}`)
                 .addTo(waypointLayer);
         });
+    });
+    mapBridge.mission_route_changed.connect(routeJson => {
+        renderMissionRoute(JSON.parse(routeJson));
+    });
+    mapBridge.live_uav_telemetry_changed.connect(telemetryJson => {
+        updateLiveUav(JSON.parse(telemetryJson));
+    });
+    mapBridge.latest_mission_route(routeJson => {
+        renderMissionRoute(JSON.parse(routeJson));
+    });
+    mapBridge.latest_live_uav_telemetry(telemetryJson => {
+        updateLiveUav(JSON.parse(telemetryJson));
     });
     mapBridge.load_search_areas();
 });
