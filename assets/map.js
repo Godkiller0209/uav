@@ -20,6 +20,8 @@ let draftPoints = [];
 let selectedAreaId = null;
 let isDrawing = false;
 let isChoosingUavPosition = false;
+let isChoosingSpiralCenter = false;
+let spiralCenter = null;
 let uavPosition = null;
 let uavMarker = null;
 let mapBridge = null;
@@ -32,6 +34,7 @@ let liveTrackPoints = [];
 const savedAreaLayer = L.layerGroup().addTo(map);
 const draftLayer = L.layerGroup().addTo(map);
 const routeLayer = L.layerGroup().addTo(map);
+const spiralLayer = L.layerGroup().addTo(map);
 const waypointLayer = L.layerGroup().addTo(map);
 const missionRouteLayer = L.layerGroup().addTo(map);
 const missionWaypointLayer = L.layerGroup().addTo(map);
@@ -65,8 +68,61 @@ function showMessage(message) {
 function clearDisplayedRoute() {
     routeLayer.clearLayers();
     waypointLayer.clearLayers();
+    spiralLayer.clearLayers();
     routeStartPosition = null;
     routeStartSource = null;
+}
+
+function setSpiralCenter(latlng) {
+    spiralCenter = {
+        lat: Number(latlng.lat.toFixed(7)),
+        lon: Number(latlng.lng.toFixed(7))
+    };
+    isChoosingSpiralCenter = false;
+    document.getElementById('choose-spiral-center').classList.remove('mode-active');
+    clearDisplayedRoute();
+    L.circleMarker([spiralCenter.lat, spiralCenter.lon], {
+        radius: 8,
+        color: '#795000',
+        weight: 3,
+        fillColor: '#ffca28',
+        fillOpacity: 1
+    }).bindTooltip('Tâm Archimedean Spiral').addTo(spiralLayer);
+    showMessage(
+        `Đã chọn tâm Spiral: ${spiralCenter.lat}, ${spiralCenter.lon}. `
+        + 'Bấm Generate Trajectory để tạo lại.'
+    );
+}
+
+function renderArchimedeanTrajectory(trajectory) {
+    routeLayer.clearLayers();
+    waypointLayer.clearLayers();
+    spiralLayer.clearLayers();
+    if (trajectory.center) {
+        L.circleMarker([trajectory.center.lat, trajectory.center.lon], {
+            radius: 8,
+            color: '#795000',
+            weight: 3,
+            fillColor: '#ffca28',
+            fillOpacity: 1
+        }).bindTooltip('Tâm Archimedean Spiral').addTo(spiralLayer);
+    }
+    trajectory.segments.forEach((segment, index) => {
+        const points = segment.map(point => [point.lat, point.lon]);
+        L.polyline(points, {
+            color: '#e53935',
+            weight: 4,
+            opacity: 0.95
+        }).bindTooltip(`Spiral segment ${index + 1}`).addTo(spiralLayer);
+    });
+    const ratio = trajectory.coverage_ratio === null
+        ? 'chưa tính' : `${(trajectory.coverage_ratio * 100).toFixed(1)}%`;
+    showMessage(
+        `Archimedean Spiral · ${trajectory.area_name}: `
+        + `${trajectory.segments.length} đoạn, đứt ${trajectory.discontinuity_count} lần, `
+        + `dài ${trajectory.path_length_m.toFixed(1)} m, coverage ước lượng ${ratio}. `
+        + 'Các đoạn rời nhau không được tự nối.'
+    );
 }
 
 function renderMissionRoute(waypoints) {
@@ -254,7 +310,9 @@ function renderSavedAreas() {
 
             polygon.on('click', event => {
                 L.DomEvent.stopPropagation(event.originalEvent);
-                if (isChoosingUavPosition) {
+                if (isChoosingSpiralCenter) {
+                    setSpiralCenter(event.latlng);
+                } else if (isChoosingUavPosition) {
                     setUavPosition(event.latlng);
                 } else if (!isDrawing) {
                     selectArea(area.id);
@@ -303,6 +361,10 @@ function renderDraft() {
 }
 
 function selectArea(areaId) {
+    if (areaId !== selectedAreaId) {
+        spiralCenter = null;
+        clearDisplayedRoute();
+    }
     selectedAreaId = areaId;
     renderSavedAreas();
     if (areaId) {
@@ -322,6 +384,10 @@ function startDrawing() {
 }
 
 map.on('click', event => {
+    if (isChoosingSpiralCenter) {
+        setSpiralCenter(event.latlng);
+        return;
+    }
     if (isChoosingUavPosition) {
         setUavPosition(event.latlng);
         return;
@@ -358,11 +424,71 @@ document.getElementById('choose-uav-position').addEventListener('click', event =
     event.currentTarget.classList.toggle('mode-active', isChoosingUavPosition);
 
     if (isChoosingUavPosition) {
+        isChoosingSpiralCenter = false;
+        document.getElementById('choose-spiral-center').classList.remove('mode-active');
         showMessage('Chế độ offline: click bản đồ để chọn điểm gốc giả lập màu xanh.');
     } else {
         showMessage('Đã thoát chế độ chọn điểm gốc giả lập.');
     }
 });
+
+document.getElementById('choose-spiral-center').addEventListener('click', event => {
+    isChoosingSpiralCenter = !isChoosingSpiralCenter;
+    event.currentTarget.classList.toggle('mode-active', isChoosingSpiralCenter);
+    if (isChoosingSpiralCenter) {
+        isChoosingUavPosition = false;
+        document.getElementById('choose-uav-position').classList.remove('mode-active');
+        showMessage('Click trong polygon đang chọn để đặt tâm Spiral.');
+    } else {
+        showMessage('Tâm hiện tại được giữ lại. Dùng nút “Dùng tâm Spiral tự động” để xóa lựa chọn này.');
+    }
+});
+
+document.getElementById('automatic-spiral-center').addEventListener('click', () => {
+    spiralCenter = null;
+    isChoosingSpiralCenter = false;
+    document.getElementById('choose-spiral-center').classList.remove('mode-active');
+    clearDisplayedRoute();
+    showMessage('Tâm xoắn sẽ do Python tự chọn bên trong polygon.');
+});
+
+document.getElementById('trajectory-algorithm').addEventListener('change', () => {
+    clearDisplayedRoute();
+    const isSpiral = document.getElementById('trajectory-algorithm').value
+        === 'archimedean_spiral';
+    updateTrajectoryControls();
+    if (isSpiral) {
+        isChoosingUavPosition = false;
+        document.getElementById('choose-uav-position').classList.remove('mode-active');
+    } else {
+        isChoosingSpiralCenter = false;
+        document.getElementById('choose-spiral-center').classList.remove('mode-active');
+    }
+    if (isSpiral && spiralCenter) {
+        L.circleMarker([spiralCenter.lat, spiralCenter.lon], {
+            radius: 8,
+            color: '#795000',
+            weight: 3,
+            fillColor: '#ffca28',
+            fillOpacity: 1
+        }).bindTooltip('Tâm Archimedean Spiral').addTo(spiralLayer);
+    }
+    showMessage(isSpiral
+        ? 'Archimedean Spiral sẽ được tạo cho polygon đang chọn.'
+        : 'Zigzag sẽ tạo waypoint cho tất cả polygon đã lưu.');
+});
+
+function updateTrajectoryControls() {
+    const isSpiral = document.getElementById('trajectory-algorithm').value
+        === 'archimedean_spiral';
+    document.getElementById('spiral-options').hidden = !isSpiral;
+    document.getElementById('choose-uav-position').hidden = isSpiral;
+    document.querySelector('label[for="spacing"]').textContent = isSpiral
+        ? 'Khoảng cách giữa các vòng xoắn (m)'
+        : 'Khoảng cách giữa các làn Zigzag (m)';
+}
+
+updateTrajectoryControls();
 
 document.getElementById('cancel-drawing').addEventListener('click', () => {
     draftPoints = [];
@@ -388,6 +514,7 @@ document.getElementById('finish-area').addEventListener('click', () => {
         name: `Khu vực ${nextNumber}`,
         coordinates: draftPoints
     };
+    spiralCenter = null;
     areas.push(newArea);
     selectedAreaId = newArea.id;
     draftPoints = [];
@@ -427,7 +554,7 @@ document.getElementById('delete-area').addEventListener('click', () => {
         return;
     }
     if (!window.confirm(
-            `Xóa ${selectedArea.name}? Tuyến waypoint hiện tại sẽ bị xóa và cần tạo lại.`)) {
+            `Xóa ${selectedArea.name}? Các tuyến đã tạo cho khu vực sẽ bị xóa.`)) {
         return;
     }
     if (!mapBridge) {
@@ -436,6 +563,7 @@ document.getElementById('delete-area').addEventListener('click', () => {
     }
 
     const deletedAreaId = selectedArea.id;
+    spiralCenter = null;
     areas = areas.filter(area => area.id !== deletedAreaId);
     selectedAreaId = areas.length > 0 ? areas[0].id : null;
     clearDisplayedRoute();
@@ -453,7 +581,29 @@ document.getElementById('generate-path').addEventListener('click', () => {
         return;
     }
 
+    const algorithm = document.getElementById('trajectory-algorithm').value;
     const spacing = Number(document.getElementById('spacing').value);
+    if (algorithm === 'archimedean_spiral') {
+        const selectedArea = getSelectedArea();
+        if (!selectedArea) {
+            showMessage('Hãy chọn polygon cần tạo Archimedean Spiral.');
+            return;
+        }
+        const footprint = Number(document.getElementById('footprint-width').value);
+        const initialRadius = Number(document.getElementById('initial-radius').value);
+        if (!Number.isFinite(spacing) || spacing <= 0
+                || !Number.isFinite(footprint) || footprint <= 0
+                || !Number.isFinite(initialRadius) || initialRadius < 0) {
+            showMessage('Spacing và footprint phải lớn hơn 0; bán kính ban đầu không âm.');
+            return;
+        }
+        mapBridge.generate_archimedean_spiral(
+            JSON.stringify(selectedArea), spacing, initialRadius,
+            JSON.stringify(spiralCenter), footprint
+        );
+        return;
+    }
+
     mapBridge.latest_live_uav_telemetry(telemetryJson => {
         let telemetry;
         try {
@@ -508,6 +658,7 @@ new QWebChannel(qt.webChannelTransport, channel => {
     });
     mapBridge.coverage_path_ready.connect(pathJson => {
         const coveragePath = JSON.parse(pathJson);
+        spiralLayer.clearLayers();
         routeStartPosition = coveragePath.start_position
             || (hasValidLiveUavPosition(liveUavTelemetry)
                 ? { lat: liveUavTelemetry.lat, lon: liveUavTelemetry.lon }
@@ -539,6 +690,9 @@ new QWebChannel(qt.webChannelTransport, channel => {
                 .bindTooltip(`Waypoint ${index + 1}`)
                 .addTo(waypointLayer);
         });
+    });
+    mapBridge.trajectory_ready.connect(trajectoryJson => {
+        renderArchimedeanTrajectory(JSON.parse(trajectoryJson));
     });
     mapBridge.mission_route_changed.connect(routeJson => {
         renderMissionRoute(JSON.parse(routeJson));

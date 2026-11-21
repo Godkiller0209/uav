@@ -47,4 +47,5 @@ dist/
 /data/search_area.json
 /data/search_areas.json
 /data/waypoints.json
+/data/trajectories.json
 /data/logs/

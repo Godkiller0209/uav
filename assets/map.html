@@ -38,6 +38,7 @@
         }
 
         button, input, select { font: inherit; }
+        [hidden] { display: none !important; }
 
         #map-workspace {
             width: 100%;
@@ -88,6 +89,12 @@
             gap: 9px;
         }
 
+        #spiral-options {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+        }
+
         .section-title {
             margin: 0;
             padding-bottom: 8px;
@@ -109,7 +116,8 @@
             gap: 6px;
         }
 
-        #area-list, #area-name, #spacing {
+        #area-list, #trajectory-algorithm, #area-name, #spacing,
+        #initial-radius, #footprint-width {
             width: 100%;
             min-height: 38px;
             padding: 8px 10px;
@@ -120,7 +128,8 @@
             background: #0d1a2c;
         }
 
-        #area-list:focus, #area-name:focus, #spacing:focus {
+        #area-list:focus, #trajectory-algorithm:focus, #area-name:focus,
+        #spacing:focus, #initial-radius:focus, #footprint-width:focus {
             border-color: #4792ef;
         }
 
@@ -162,6 +171,12 @@
             border-color: #23a85c;
             background: #155c38;
             color: #eafff1;
+        }
+
+        #choose-spiral-center.mode-active {
+            border-color: #d89b27;
+            background: #705016;
+            color: #fff5dc;
         }
 
         .icon-button {
@@ -270,10 +285,25 @@
 
                 <div class="section">
                     <h2 class="section-title">Tạo tuyến bay</h2>
+                    <label class="field-label" for="trajectory-algorithm">Thuật toán</label>
+                    <select id="trajectory-algorithm" aria-label="Thuật toán tạo quỹ đạo">
+                        <option value="zigzag">Zigzag · tất cả khu vực</option>
+                        <option value="archimedean_spiral">Archimedean Spiral · khu vực đang chọn</option>
+                    </select>
                     <button id="choose-uav-position" class="control-button" type="button">📍 Điểm gốc giả lập (offline)</button>
                     <label class="field-label" for="spacing">Khoảng cách quét (m)</label>
                     <input id="spacing" type="number" min="1" step="1" value="20">
-                    <button id="generate-path" class="control-button primary" type="button">⚙ Tạo tuyến tất cả khu vực</button>
+                    <div id="spiral-options" class="parameter-group" hidden>
+                        <div class="section-title">Thông số Archimedean Spiral</div>
+                        <span class="field-label">Tâm xoắn</span>
+                        <button id="choose-spiral-center" class="control-button" type="button">◎ Chọn tâm trên bản đồ</button>
+                        <button id="automatic-spiral-center" class="control-button" type="button">◎ Dùng tâm tự động</button>
+                        <label class="field-label" for="initial-radius">Bán kính ban đầu (m)</label>
+                        <input id="initial-radius" type="number" min="0" step="0.5" value="0">
+                        <label class="field-label" for="footprint-width">Đường kính footprint cảm biến (m)</label>
+                        <input id="footprint-width" type="number" min="0.1" step="0.5" value="20">
+                    </div>
+                    <button id="generate-path" class="control-button primary" type="button">⚙ Generate Trajectory</button>
                 </div>
 
                 <div class="section">

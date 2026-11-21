@@ -13,11 +13,15 @@ from coverage_path_planning.waypoint_store import (
     remove_waypoint_routes_not_matching_areas,
     save_waypoints,
 )
+from trajectory_planning.coverage.archimedean_spiral import (
+    create_archimedean_spiral,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 SEARCH_AREAS_FILE = PROJECT_DIR / "data" / "search_areas.json"
 LEGACY_SEARCH_AREA_FILE = PROJECT_DIR / "data" / "search_area.json"
+TRAJECTORY_FILE = PROJECT_DIR / "data" / "trajectories.json"
 
 SEARCH_AREAS_SCHEMA_VERSION = 1
 
@@ -29,6 +33,7 @@ class MapBridge(QObject):
     search_areas_loaded = pyqtSignal(str)
     search_areas_saved = pyqtSignal(str)
     coverage_path_ready = pyqtSignal(str)
+    trajectory_ready = pyqtSignal(str)
     mission_route_changed = pyqtSignal(str)
     live_uav_telemetry_changed = pyqtSignal(str)
 
@@ -271,6 +276,61 @@ class MapBridge(QObject):
             f"điểm gốc từ {'GPS Telemetry UAV' if start_source == 'telemetry' else 'vị trí giả lập'}. "
             "Đã lưu vào data/waypoints.json."
         )
+
+    @pyqtSlot(str, float, float, str, float)
+    def generate_archimedean_spiral(
+            self, area_json, spacing_m, initial_radius_m,
+            center_json, footprint_width_m):
+        """Tạo Spiral cho đúng polygon được chọn, không đổi tuyến Mission cũ."""
+        try:
+            area = json.loads(area_json)
+            self._validate_search_areas({
+                "schema_version": SEARCH_AREAS_SCHEMA_VERSION,
+                "areas": [area],
+            })
+            center = json.loads(center_json)
+            trajectory = create_archimedean_spiral(
+                area["coordinates"],
+                spacing_m,
+                initial_radius_m=initial_radius_m,
+                center=center,
+                footprint_width_m=footprint_width_m,
+            )
+            trajectory["area_id"] = area["id"]
+            trajectory["area_name"] = area["name"]
+        except (json.JSONDecodeError, TypeError, ValueError) as error:
+            self.status_changed.emit(f"Không thể tạo Archimedean Spiral: {error}")
+            return
+
+        self.trajectory_ready.emit(
+            json.dumps(trajectory, ensure_ascii=False)
+        )
+        try:
+            TRAJECTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            TRAJECTORY_FILE.write_text(
+                json.dumps(trajectory, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as error:
+            self.status_changed.emit(
+                f"Đã tạo Spiral nhưng không lưu được trajectories.json: {error}"
+            )
+            return
+
+        message = (
+            f"Đã tạo Spiral cho {area['name']}: {len(trajectory['segments'])} "
+            f"đoạn, dài {trajectory['path_length_m']:.1f} m, "
+            f"{trajectory['discontinuity_count']} điểm đứt. "
+            "Quỹ đạo chỉ được hiển thị, chưa gửi tới PX4."
+        )
+        if spacing_m > footprint_width_m:
+            message += " Cảnh báo: spacing lớn hơn footprint, có thể bỏ sót vùng."
+        if trajectory["coverage_ratio"] is not None:
+            message += (
+                f" Coverage Ratio ước lượng: "
+                f"{trajectory['coverage_ratio'] * 100:.1f}%."
+            )
+        self.status_changed.emit(message)
 
     @staticmethod
     def _validate_coordinates(coordinates):
